@@ -26,7 +26,7 @@ jobs:
           body: |
             This is an automatic build.
           draft: false
-          prerelease: true
+          prerelease: false
       - name: Get release
         id: get_release
         if: github.event_name == 'release'
