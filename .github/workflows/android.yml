@@ -2,54 +2,12 @@ name: Android CI
 
 on:
   push:
-    branches: [ "master" ]
   pull_request:
-    branches: [ "master" ]
+  workflow_dispatch:
 
 jobs:
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get short SHA
-        id: slug
-        run: echo "::set-output name=sha7::$(echo ${GITHUB_SHA} | cut -c1-7)"
-      - name: Create release
-        id: create_release
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: auto-build-${{ github.ref_name }}-${{ steps.slug.outputs.sha7 }}
-          release_name: Auto build ${{ github.ref_name }} ${{ steps.slug.outputs.sha7 }}
-          body: |
-            This is an automatic build.
-          draft: false
-          prerelease: false
-      - name: Get release
-        id: get_release
-        if: github.event_name == 'release'
-        uses: bruceadams/get-release@v1.2.3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Output
-        id: output
-        uses: actions/github-script@v5
-        with:
-          script: |
-            if ("${{ github.event_name }}" === "push" || "${{ github.event_name }}" === "pull_request") {
-              return "${{ steps.create_release.outputs.upload_url }}"
-            } else if ("${{ github.event_name }}" === "release") {
-              return "${{ steps.get_release.outputs.upload_url }}"
-            } 
-          result-encoding: string
-    outputs:
-      upload_url: ${{ steps.output.outputs.result }}
-
   build:
     name: Build
-    needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -70,12 +28,43 @@ jobs:
       - name: Copy file
         run: cp ./app/build/outputs/apk/release/app-release-unsigned.apk ./maatouch
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: maatouch
+          path: ./maatouch
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: (github.event_name == 'push' || github.event_name == 'pull_request') && github.event.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: maatouch
+          path: ./
+      - name: Get short SHA
+        id: slug
+        run: echo "::set-output name=sha7::$(echo ${GITHUB_SHA} | cut -c1-7)"
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: auto-build-${{ github.ref_name }}-${{ steps.slug.outputs.sha7 }}
+          release_name: Auto build ${{ github.ref_name }} ${{ steps.slug.outputs.sha7 }}
+          body: |
+            This is an automatic build.
+          draft: false
+          prerelease: false
       - name: Upload release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./maatouch
           asset_name: maatouch
           asset_content_type: application/zip
@@ -86,7 +75,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./maatouch.base64
           asset_name: maatouch.base64
           asset_content_type: text/plain
