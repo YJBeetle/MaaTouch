@@ -50,4 +50,3 @@ jobs:
             ./maatouch.base64
           tag_name: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: true
